@@ -1,4 +1,118 @@
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-pydantic==2.5.0
-python-multipart==0.0.6
+# backend/requirements.txt - Complete ChatCraft Studio Dependencies
+
+# Core FastAPI and Web Framework
+fastapi
+uvicorn[standard]
+pydantic
+python-multipart
+
+# Database and ORM
+sqlalchemy[asyncio]
+asyncpg  # PostgreSQL async driver
+alembic  # Database migrations
+psycopg2-binary  # PostgreSQL synchronous driver (for utilities)
+
+# Authentication and Security
+python-jose[cryptography]
+passlib[bcrypt]
+
+# HTTP Client and File Handling
+httpx
+aiofiles
+
+# Document Processing
+PyPDF2
+python-docx
+python-pptx
+openpyxl  # Excel file support
+
+# Web Scraping
+beautifulsoup4
+trafilatura
+selenium
+playwright
+requests
+
+# Video/Audio Processing
+yt-dlp
+openai-whisper
+ffmpeg-python
+
+# Vector Databases
+weaviate-client
+qdrant-client
+chromadb
+pinecone-client
+
+# Embeddings and NLP
+openai  # For embeddings and chat completion
+sentence-transformers
+transformers
+torch  # PyTorch for sentence transformers
+numpy
+scikit-learn
+
+# Text Processing
+spacy
+nltk
+textstat  # Text readability metrics
+langdetect  # Language detection
+
+# Background Tasks and Caching
+celery[redis]
+redis
+dramatiq[redis]  # Alternative to Celery
+
+# Monitoring and Logging
+structlog
+prometheus-client
+sentry-sdk[fastapi]
+loguru
+
+# Development and Testing
+pytest
+pytest-asyncio
+pytest-cov
+factory-boy  # Test data factories
+
+# Data Processing and Analysis
+pandas
+matplotlib  # For analytics charts
+seaborn  # Statistical plotting
+
+# File and Media Processing
+pillow  # Image processing
+markdown
+python-magic  # File type detection
+
+# Configuration and Environment
+python-dotenv
+pydantic-settings
+
+# Rate Limiting and Security
+slowapi  # Rate limiting for FastAPI
+
+# Deployment and Production
+gunicorn
+docker
+
+# Optional: Cohere for alternative embeddings
+# cohere
+
+# Optional: Anthropic Claude API
+# anthropic
+
+# Optional: HuggingFace Hub
+# huggingface-hub
+
+# Development tools (optional)
+black
+isort
+flake8
+mypy
+
+# Database migrations and utilities
+yoyo-migrations  # Alternative to Alembic
+
+# WebSocket support for real-time features
+websockets
