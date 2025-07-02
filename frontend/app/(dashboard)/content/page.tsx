@@ -1,4 +1,4 @@
-// app/dashboard/content/page.tsx - Comprehensive Content Management Page
+// app/(dashboard)/content/page.tsx - Updated Content Management Page
 
 "use client"
 
@@ -49,16 +49,21 @@ import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 
-// Import our custom components and hooks
-import { FileUpload, DocumentUpload, MediaUpload } from '@/components/file-upload'
+// Import our custom components and hooks - FIXED IMPORTS
+import { FileUpload } from '@/components/file-upload'
+import { DocumentUpload } from '@/components/document-upload'
+import { MediaUpload } from '@/components/media-upload'
 import { 
   useContentSources, 
   useContentStats, 
   useDeleteContentSource,
   useUpdateContentSource,
   useProcessingProgress,
-  useTenantUsage
+  useTenantUsage,
+  useCreateContentSource
 } from '@/hooks/api'
 import type { ContentSource, ContentType, ProcessingStatus } from '@/types'
 
@@ -112,11 +117,13 @@ const getStatusIcon = (status: ProcessingStatus) => {
     case 'failed':
       return <XCircle className="h-4 w-4 text-red-500" />
     case 'processing':
+    case 'chunking':
+    case 'embedding':
       return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
     case 'pending':
       return <Clock className="h-4 w-4 text-yellow-500" />
-    case 'cancelled':
-      return <XCircle className="h-4 w-4 text-gray-500" />
+    case 'retry':
+      return <RefreshCw className="h-4 w-4 text-orange-500" />
     default:
       return <Clock className="h-4 w-4 text-gray-400" />
   }
@@ -127,8 +134,10 @@ const getStatusBadge = (status: ProcessingStatus) => {
     completed: 'default',
     failed: 'destructive',
     processing: 'secondary',
+    chunking: 'secondary',
+    embedding: 'secondary',
     pending: 'outline',
-    cancelled: 'secondary',
+    retry: 'secondary',
   } as const
 
   return (
@@ -210,10 +219,10 @@ const ContentSourceRow: React.FC<ContentSourceRowProps> = ({
   onView 
 }) => {
   const { data: progress } = useProcessingProgress(
-    source.status === 'processing' ? source.id : ''
+    source.status === 'processing' || source.status === 'chunking' || source.status === 'embedding' ? source.id : ''
   )
 
-  const isProcessing = source.status === 'processing'
+  const isProcessing = ['processing', 'chunking', 'embedding'].includes(source.status)
   const processingProgress = progress?.progress_percentage || 0
 
   return (
@@ -255,16 +264,16 @@ const ContentSourceRow: React.FC<ContentSourceRowProps> = ({
       
       <TableCell className="text-sm text-muted-foreground">
         <div>
-          {source.stats?.total_documents || 0} docs
+          {source.total_chunks || 0} chunks
         </div>
         <div>
-          {source.stats?.total_chunks || 0} chunks
+          {source.processed_chunks || 0} processed
         </div>
       </TableCell>
       
       <TableCell className="text-sm text-muted-foreground">
-        {source.stats?.file_size_bytes 
-          ? formatFileSize(source.stats.file_size_bytes)
+        {source.file_size_mb 
+          ? `${source.file_size_mb.toFixed(1)} MB`
           : '—'
         }
       </TableCell>
@@ -327,7 +336,49 @@ const ContentSourceRow: React.FC<ContentSourceRowProps> = ({
 }
 
 const AddContentDialog: React.FC<AddContentDialogProps> = ({ open, onOpenChange }) => {
-  const [uploadType, setUploadType] = useState<'file' | 'website' | 'api'>('file')
+  const [uploadType, setUploadType] = useState<'documents' | 'media' | 'website' | 'api'>('documents')
+  const [websiteUrl, setWebsiteUrl] = useState('')
+  const [websiteName, setWebsiteName] = useState('')
+  const [includeSubpages, setIncludeSubpages] = useState(false)
+
+  const createContentSource = useCreateContentSource()
+
+  const handleFileUploadComplete = useCallback(async (files: any[], contentType: ContentType) => {
+    try {
+      for (const file of files) {
+        await createContentSource.mutateAsync({
+          name: file.name,
+          content_type: contentType,
+          file: file.file
+        })
+      }
+      onOpenChange(false)
+    } catch (error) {
+      console.error('Failed to create content source:', error)
+    }
+  }, [createContentSource, onOpenChange])
+
+  const handleWebsiteSubmit = useCallback(async () => {
+    if (!websiteUrl || !websiteName) return
+
+    try {
+      await createContentSource.mutateAsync({
+        name: websiteName,
+        content_type: 'website',
+        source_url: websiteUrl,
+        config: {
+          include_subpages: includeSubpages,
+          max_pages: includeSubpages ? 50 : 1
+        }
+      })
+      onOpenChange(false)
+      setWebsiteUrl('')
+      setWebsiteName('')
+      setIncludeSubpages(false)
+    } catch (error) {
+      console.error('Failed to create website content source:', error)
+    }
+  }, [websiteUrl, websiteName, includeSubpages, createContentSource, onOpenChange])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -340,10 +391,14 @@ const AddContentDialog: React.FC<AddContentDialogProps> = ({ open, onOpenChange 
         </DialogHeader>
 
         <Tabs value={uploadType} onValueChange={(value) => setUploadType(value as any)}>
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="file" className="flex items-center space-x-2">
-              <Upload className="h-4 w-4" />
-              <span>Files</span>
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="documents" className="flex items-center space-x-2">
+              <FileText className="h-4 w-4" />
+              <span>Documents</span>
+            </TabsTrigger>
+            <TabsTrigger value="media" className="flex items-center space-x-2">
+              <Video className="h-4 w-4" />
+              <span>Media</span>
             </TabsTrigger>
             <TabsTrigger value="website" className="flex items-center space-x-2">
               <Globe className="h-4 w-4" />
@@ -355,32 +410,105 @@ const AddContentDialog: React.FC<AddContentDialogProps> = ({ open, onOpenChange 
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="file" className="space-y-4">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <TabsContent value="documents" className="space-y-4">
+            <div className="space-y-6">
               <div>
                 <h3 className="text-lg font-semibold mb-4">Document Upload</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Upload documents like PDFs, Word files, presentations, and more. Images will be processed with OCR.
+                </p>
                 <DocumentUpload 
-                  variant="compact"
-                  onUploadComplete={() => onOpenChange(false)}
+                  onUploadComplete={(files) => handleFileUploadComplete(files, 'document')}
+                  onUploadError={(error) => {
+                    console.error('Upload error:', error)
+                    // TODO: Show toast notification
+                  }}
                 />
               </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="media" className="space-y-4">
+            <div className="space-y-6">
               <div>
                 <h3 className="text-lg font-semibold mb-4">Media Upload</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Upload video and audio files. They will be automatically transcribed and made searchable.
+                </p>
                 <MediaUpload 
-                  variant="compact"
-                  onUploadComplete={() => onOpenChange(false)}
+                  onUploadComplete={(files) => handleFileUploadComplete(files, 'video')}
+                  onUploadError={(error) => {
+                    console.error('Upload error:', error)
+                    // TODO: Show toast notification
+                  }}
                 />
               </div>
             </div>
           </TabsContent>
 
           <TabsContent value="website" className="space-y-4">
-            <Alert>
-              <Globe className="h-4 w-4" />
-              <AlertDescription>
-                Website crawling feature coming soon. This will allow you to automatically extract and process content from websites.
-              </AlertDescription>
-            </Alert>
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Website Content</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Extract content from websites to add to your knowledge base.
+                </p>
+              </div>
+
+              <div className="grid gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="website-name">Content Source Name</Label>
+                  <Input
+                    id="website-name"
+                    placeholder="e.g., Company Documentation"
+                    value={websiteName}
+                    onChange={(e) => setWebsiteName(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="website-url">Website URL</Label>
+                  <Input
+                    id="website-url"
+                    type="url"
+                    placeholder="https://example.com"
+                    value={websiteUrl}
+                    onChange={(e) => setWebsiteUrl(e.target.value)}
+                  />
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="include-subpages"
+                    checked={includeSubpages}
+                    onChange={(e) => setIncludeSubpages(e.target.checked)}
+                    className="rounded border-gray-300"
+                  />
+                  <Label htmlFor="include-subpages" className="text-sm">
+                    Include subpages (up to 50 pages)
+                  </Label>
+                </div>
+
+                <Button 
+                  onClick={handleWebsiteSubmit}
+                  disabled={!websiteUrl || !websiteName || createContentSource.isPending}
+                  className="w-full"
+                >
+                  {createContentSource.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Adding Website...
+                    </>
+                  ) : (
+                    <>
+                      <Globe className="h-4 w-4 mr-2" />
+                      Add Website
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="api" className="space-y-4">
@@ -438,7 +566,7 @@ export default function ContentManagementPage() {
 
     return contentSources.data.reduce((acc, source) => {
       acc.total++
-      if (source.status === 'processing') acc.processing++
+      if (['processing', 'chunking', 'embedding'].includes(source.status)) acc.processing++
       else if (source.status === 'completed') acc.completed++
       else if (source.status === 'failed') acc.failed++
       return acc
@@ -512,8 +640,8 @@ export default function ContentManagementPage() {
         />
         <StatsCard
           title="Storage Used"
-          value={usage ? `${usage.current_month.storage_used_mb.toFixed(1)} MB` : '—'}
-          description={usage ? `${usage.usage_percentage.storage.toFixed(1)}% of limit` : ''}
+          value={usage?.storage_used_mb ? `${usage.storage_used_mb.toFixed(1)} MB` : '—'}
+          description={usage?.max_storage_mb ? `of ${usage.max_storage_mb} MB limit` : ''}
           icon={<BarChart3 className="h-4 w-4 text-muted-foreground" />}
         />
       </div>
@@ -570,9 +698,11 @@ export default function ContentManagementPage() {
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="processing">Processing</SelectItem>
+                <SelectItem value="chunking">Chunking</SelectItem>
+                <SelectItem value="embedding">Embedding</SelectItem>
                 <SelectItem value="completed">Completed</SelectItem>
                 <SelectItem value="failed">Failed</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
+                <SelectItem value="retry">Retry</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -644,7 +774,7 @@ export default function ContentManagementPage() {
               <p className="text-sm text-muted-foreground">
                 Showing {filteredSources.length} of {sourceStats.total} content sources
               </p>
-              {contentSources?.meta?.has_more && (
+              {contentSources?.data && contentSources.data.length >= 50 && (
                 <Button variant="outline" size="sm">
                   Load More
                 </Button>
